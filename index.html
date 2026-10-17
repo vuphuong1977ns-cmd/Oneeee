@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>One Piece: Grand Line Mobile 2D</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body {
+            margin: 0;
+            padding: 0;
+            background: #050811;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        #game-wrapper {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            max-width: 900px;
+            max-height: 500px;
+            border: 3px solid #f39c12;
+            box-shadow: 0 0 20px rgba(243, 156, 18, 0.4);
+            background: #111;
+        }
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        /* Bảng điều khiển cảm ứng cho điện thoại phía dưới */
+        #mobile-controls {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: space-around;
+            padding: 0 15px;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .control-group {
+            display: flex;
+            gap: 8px;
+            pointer-events: auto;
+        }
+        .btn-action {
+            background: rgba(243, 156, 18, 0.8);
+            color: #000;
+            border: 2px solid #fff;
+            font-weight: bold;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .btn-action:active {
+            background: #d35400;
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <canvas id="gameCanvas" width="900" height="500"></canvas>
+        
+        <!-- Các nút bấm phụ trợ trên màn hình cảm ứng -->
+        <div id="mobile-controls">
+            <div class="control-group">
+                <button class="btn-action" onclick="switchCharacter()">Đổi NV (K)</button>
+                <button class="btn-action" onclick="toggleForm()">Gear/Form (L)</button>
+                <button class="btn-action" onclick="toggleHaki()">Haki (H)</button>
+            </div>
+            <div class="control-group">
+                <button class="btn-action" onclick="useSkill(0)">1</button>
+                <button class="btn-action" onclick="useSkill(1)">2</button>
+                <button class="btn-action" onclick="useSkill(2)">3</button>
+                <button class="btn-action" onclick="useSkill(3)">4</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+
+        // --- HỆ THỐNG ĐẢO & CỐT TRUYỆN ---
+        const storyline = [
+            { id: 1, name: "Làng Syrup", boss: "Captain Kuro", reqLv: 1, bg: "#1e1b4b" },
+            { id: 2, name: "Baratie", boss: "Don Krieg", reqLv: 5, bg: "#065f46" },
+            { id: 3, name: "Arlong Park", boss: "Arlong", reqLv: 10, bg: "#0369a1" },
+            { id: 4, name: "Loguetown", boss: "Smoker", reqLv: 15, bg: "#334155" },
+            { id: 5, name: "Drum Island", boss: "Wapol", reqLv: 20, bg: "#1e3a8a" },
+            { id: 6, name: "Alabasta", boss: "Crocodile", reqLv: 25, bg: "#78350f" },
+            { id: 7, name: "Skypiea", boss: "Eneru", reqLv: 32, bg: "#1e40af" },
+            { id: 8, name: "Enies Lobby", boss: "Rob Lucci", reqLv: 40, bg: "#581c87" },
+            { id: 9, name: "Marineford", boss: "Akainu", reqLv: 50, bg: "#7f1d1d" }
+        ];
+        let currentIslandIdx = 0;
+
+        // --- ĐẦY ĐỦ 9 THÀNH VIÊN BĂNG MŨ RƠM ---
+        const characters = [
+            { name: "Monkey D. Luffy", role: "Thuyền trưởng", hp: 220, maxHp: 220, level: 1, exp: 0, nextExp: 100, speed: 4.5, form: "Bình thường", haki: false, color: "#ef4444", skills: [{ name: "Pistol", dmg: 35 }, { name: "Gatling", dmg: 65 }, { name: "Jet Pistol", dmg: 100 }, { name: "Gigant", dmg: 150 }] },
+            { name: "Roronoa Zoro", role: "Kiếm sĩ", hp: 250, maxHp: 250, level: 1, exp: 0, nextExp: 100, speed: 4.0, form: "Tam Đao", haki: false, color: "#10b981", skills: [{ name: "Oni Giri", dmg: 40 }, { name: "Tora Gari", dmg: 70 }, { name: "Sanzen Sekai", dmg: 110 }, { name: "Ashura", dmg: 165 }] },
+            { name: "Nami", role: "Hoa tiêu", hp: 150, maxHp: 150, level: 1, exp: 0, nextExp: 100, speed: 4.8, form: "Clima-Tact", haki: false, color: "#f59e0b", skills: [{ name: "Cyclone", dmg: 30 }, { name: "Thunderbolt", dmg: 60 }, { name: "Breed Tempo", dmg: 95 }, { name: "Gust Sword", dmg: 140 }] },
+            { name: "Usopp", role: "Xạ thủ", hp: 160, maxHp: 160, level: 1, exp: 0, nextExp: 100, speed: 4.2, form: "Sogeking", haki: false, color: "#d97706", skills: [{ name: "Namari", dmg: 32 }, { name: "Kaen Boshi", dmg: 62 }, { name: "Midare", dmg: 90 }, { name: "Firebird", dmg: 140 }] },
+            { name: "Vinsmoke Sanji", role: "Đầu bếp", hp: 230, maxHp: 230, level: 1, exp: 0, nextExp: 100, speed: 5.2, form: "Chân Đen", haki: false, color: "#3b82f6", skills: [{ name: "Collier", dmg: 38 }, { name: "Flanchet", dmg: 68 }, { name: "Diable Jambe", dmg: 105 }, { name: "Ifrit Jambe", dmg: 160 }] },
+            { name: "Tony Tony Chopper", role: "Bác sĩ", hp: 190, maxHp: 190, level: 1, exp: 0, nextExp: 100, speed: 4.5, form: "Brain Point", haki: false, color: "#ec4899", skills: [{ name: "Hoof", dmg: 33 }, { name: "Heavy Punch", dmg: 58 }, { name: "Kokuen", dmg: 95 }, { name: "Monster", dmg: 150 }] },
+            { name: "Nico Robin", role: "Khảo cổ", hp: 170, maxHp: 170, level: 1, exp: 0, nextExp: 100, speed: 4.0, form: "Hana Hana", haki: false, color: "#a855f7", skills: [{ name: "Clutch", dmg: 38 }, { name: "Tres Fleur", dmg: 65 }, { name: "Cien Fleur", dmg: 100 }, { name: "Gigantesco", dmg: 145 }] },
+            { name: "Franky", role: "Thợ tàu", hp: 270, maxHp: 270, level: 1, exp: 0, nextExp: 100, speed: 3.8, form: "Cyborg", haki: false, color: "#dc2626", skills: [{ name: "Strong Right", dmg: 45 }, { name: "Fresh Fire", dmg: 75 }, { name: "Master Nail", dmg: 115 }, { name: "Radical Beam", dmg: 175 }] },
+            { name: "Brook", role: "Nhạc công", hp: 180, maxHp: 180, level: 1, exp: 0, nextExp: 100, speed: 5.5, form: "Soul King", haki: false, color: "#94a3b8", skills: [{ name: "Aubade", dmg: 38 }, { name: "Swallow", dmg: 68 }, { name: "Yahazu Giri", dmg: 105 }, { name: "Soul Solid", dmg: 150 }] }
+        ];
+
+        let currentCharIdx = 0;
+        let player = characters[currentCharIdx];
+
+        let playerPos = { x: 180, y: 350, radius: 24 };
+        let boss = { name: storyline[currentIslandIdx].boss, x: 750, y: 340, size: 50, hp: 450, maxHp: 450 };
+
+        // --- JOYSTICK ẢO HỖ TRỢ CẢM ỨNG & CHUỘT ---
+        let joystick = {
+            baseX: 90, baseY: 400, radius: 40,
+            stickX: 90, stickY: 400, stickRadius: 18,
+            active: false, touchId: null,
+            dx: 0, dy: 0
+        };
+
+        let keys = {};
+        let effectText = "";
+        let effectTimer = 0;
+
+        // Sự kiện bàn phím PC
+        window.addEventListener("keydown", (e) => {
+            keys[e.key.toLowerCase()] = true;
+            if (e.key.toLowerCase() === 'k') switchCharacter();
+            if (e.key.toLowerCase() === 'l') toggleForm();
+            if (e.key.toLowerCase() === 'h') toggleHaki();
+            if (['1', '2', '3', '4'].includes(e.key)) useSkill(parseInt(e.key) - 1);
+        });
+        window.addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+        // Sự kiện Cảm ứng màn hình điện thoại & Chuột cho Joystick
+        canvas.addEventListener("pointerdown", (e) => {
+            const rect = canvas.getBoundingClientRect();
+            let x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            let y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            let dist = Math.hypot(x - joystick.baseX, y - joystick.baseY);
+            if (dist < joystick.radius + 30) {
+                joystick.active = true;
+                joystick.touchId = e.pointerId;
+                updateJoystick(x, y);
+            }
+        });
+
+        canvas.addEventListener("pointermove", (e) => {
+            if (!joystick.active || e.pointerId !== joystick.touchId) return;
+            const rect = canvas.getBoundingClientRect();
+            let x = (e.clientX - rect.left) * (canvas.width / rect.width);
+            let y = (e.clientY - rect.top) * (canvas.height / rect.height);
+            updateJoystick(x, y);
+        });
+
+        window.addEventListener("pointerup", (e) => {
+            if (e.pointerId === joystick.touchId) {
+                joystick.active = false;
+                joystick.stickX = joystick.baseX;
+                joystick.stickY = joystick.baseY;
+                joystick.dx = 0; joystick.dy = 0;
+            }
+        });
+
+        function updateJoystick(mx, my) {
+            let angle = Math.atan2(my - joystick.baseY, mx - joystick.baseX);
+            let dist = Math.hypot(mx - joystick.baseX, my - joystick.baseY);
+            if (dist > joystick.radius) dist = joystick.radius;
+            joystick.stickX = joystick.baseX + Math.cos(angle) * dist;
+            joystick.stickY = joystick.baseY + Math.sin(angle) * dist;
+            joystick.dx = Math.cos(angle) * (dist / joystick.radius);
+            joystick.dy = Math.sin(angle) * (dist / joystick.radius);
+        }
+
+        // --- CÁC HÀM XỬ LÝ GAME ---
+        function switchCharacter() {
+            currentCharIdx = (currentCharIdx + 1) % characters.length;
+            player = characters[currentCharIdx];
+            showEffect(`Đổi NV: ${player.name}`);
+        }
+
+        function toggleForm() {
+            if (player.name.includes("Luffy")) {
+                if (player.form === "Bình thường") { player.form = "Gear 2"; player.speed = 6; }
+                else if (player.form.includes("Gear 2")) { player.form = "Gear 3"; player.speed = 3.5; }
+                else { player.form = "Bình thường"; player.speed = 4.5; }
+            } else {
+                showEffect(`${player.name} tăng cường sức mạnh!`);
+            }
+        }
+
+        function toggleHaki() {
+            player.haki = !player.haki;
+            showEffect(player.haki ? "Haki Bật!" : "Haki Tắt");
+        }
+
+        function showEffect(txt) {
+            effectText = txt;
+            effectTimer = 50;
+        }
+
+        function useSkill(idx) {
+            let skill = player.skills[idx];
+            if (!skill) return;
+            let mult = player.haki ? 1.5 : 1.0;
+            if (player.form.includes("Gear")) mult += 0.5;
+            let dmg = Math.round(skill.dmg * mult);
+            boss.hp -= dmg;
+            showEffect(`${skill.name} (-${dmg} DMG)`);
+
+            if (boss.hp <= 0) {
+                alert(`Chiến thắng Boss ${boss.name} tại đảo ${storyline[currentIslandIdx].name}!`);
+                characters.forEach(c => {
+                    c.exp += 75;
+                    if (c.exp >= c.nextExp) { c.level++; c.exp = 0; c.maxHp += 40; c.hp = c.maxHp; }
+                });
+                currentIslandIdx = (currentIslandIdx + 1) % storyline.length;
+                boss.name = storyline[currentIslandIdx].boss;
+                boss.maxHp += 200;
+                boss.hp = boss.maxHp;
+            }
+        }
+
+        function update() {
+            let mx = 0, my = 0;
+            if (keys['w'] || keys['arrowup']) my = -1;
+            if (keys['s'] || keys['arrowdown']) my = 1;
+            if (keys['a'] || keys['arrowleft']) mx = -1;
+            if (keys['d'] || keys['arrowright']) mx = 1;
+
+            if (joystick.active) {
+                mx = joystick.dx;
+                my = joystick.dy;
+            }
+
+            playerPos.x += mx * player.speed;
+            playerPos.y += my * player.speed;
+
+            if (playerPos.x < 30) playerPos.x = 30;
+            if (playerPos.x > canvas.width - 30) playerPos.x = canvas.width - 30;
+            if (playerPos.y < 200) playerPos.y = 200;
+            if (playerPos.y > canvas.height - 30) playerPos.y = canvas.height - 30;
+
+            if (effectTimer > 0) effectTimer--;
+        }
+
+        function draw() {
+            ctx.fillStyle = storyline[currentIslandIdx].bg;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Sân đấu
+            ctx.fillStyle = "rgba(0,0,0,0.5)";
+            ctx.fillRect(0, 180, canvas.width, canvas.height - 180);
+
+            // Giao diện thông tin cốt truyện
+            ctx.fillStyle = "#fbbf24";
+            ctx.font = "bold 15px Arial";
+            ctx.fillText(`🌊 Đảo ${storyline[currentIslandIdx].id}: ${storyline[currentIslandIdx].name} | Boss: ${boss.name}`, 20, 28);
+            
+            ctx.fillStyle = "#fff";
+            ctx.font = "12px Arial";
+            ctx.fillText(`Nhân vật: ${player.name} | Lv.${player.level} | Form: ${player.form} | Haki: ${player.haki ? "ON" : "OFF"}`, 20, 50);
+
+            // Thanh máu Player
+            ctx.fillStyle = "#333"; ctx.fillRect(20, 60, 180, 10);
+            ctx.fillStyle = "#22c55e"; ctx.fillRect(20, 60, Math.max(0, (player.hp / player.maxHp) * 180), 10);
+
+            // Nhân vật
+            ctx.fillStyle = player.haki ? "#38bdf8" : player.color;
+            ctx.beginPath(); ctx.arc(playerPos.x, playerPos.y, playerPos.radius, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#fff"; ctx.lineWidth = 2; ctx.stroke();
+
+            // Boss
+            ctx.fillStyle = "#ef4444";
+            ctx.fillRect(boss.x - 20, boss.y - 20, boss.size, boss.size);
+            ctx.fillStyle = "#fff"; ctx.fillText(`Boss HP: ${boss.hp}`, boss.x - 25, boss.y - 28);
+            ctx.fillStyle = "#333"; ctx.fillRect(boss.x - 25, boss.y - 50, 80, 8);
+            ctx.fillStyle = "#ef4444"; ctx.fillRect(boss.x - 25, boss.y - 50, Math.max(0, (boss.hp / boss.maxHp) * 80), 8);
+
+            // Joystick giao diện cảm ứng
+            ctx.beginPath(); ctx.arc(joystick.baseX, joystick.baseY, joystick.radius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(255,255,255,0.1)"; ctx.fill();
+            ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.stroke();
+
+            ctx.beginPath(); ctx.arc(joystick.stickX, joystick.stickY, joystick.stickRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "rgba(243, 156, 18, 0.7)"; ctx.fill();
+
+            // Hiệu ứng giữa màn hình
+            if (effectTimer > 0) {
+                ctx.fillStyle = "#fef08a";
+                ctx.font = "bold 18px Arial";
+                ctx.fillText(effectText, canvas.width / 2 - 100, 120);
+            }
+        }
+
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
+        }
+
+        loop();
+    </script>
+</body>
+  </html>
+  
